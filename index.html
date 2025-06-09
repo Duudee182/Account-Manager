@@ -1,0 +1,1457 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lista de Tarefas - Gerenciamento de Atividades</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.14.0/Sortable.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .draggable {
+            cursor: grab;
+            user-select: none;
+            transition: all 0.2s ease;
+        }
+        .draggable:active {
+            cursor: grabbing;
+        }
+        .priority-low { border-left: 4px solid #10B981; }
+        .priority-medium { border-left: 4px solid #F59E0B; }
+        .priority-high { border-left: 4px solid #EF4444; }
+        .priority-critical { border-left: 4px solid #7C3AED; }
+        .status-todo { border-left: 4px solid #EF4444; }
+        .status-inprogress { border-left: 4px solid #F59E0B; }
+        .status-done { border-left: 4px solid #10B981; }
+        .status-archived { border-left: 4px solid #6B7280; }
+        
+        /* Custom scrollbar */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #a1a1a1;
+        }
+        
+        .sortable-chosen {
+            opacity: 0.8;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .calendar-popup {
+            display: none;
+            position: absolute;
+            z-index: 100;
+            background: white;
+            border: 1px solid #e5e7eb;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            width: 300px;
+        }
+        
+        /* Multi-select dropdown */
+        .multi-select {
+            position: relative;
+        }
+        
+        .multi-select-dropdown {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            width: 100%;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 100;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.375rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-top: 2px;
+        }
+        
+        .multi-select-tag {
+            display: inline-flex;
+            align-items: center;
+            background: #EFF6FF;
+            color: #1E40AF;
+            padding: 2px 8px;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            margin-right: 4px;
+            margin-bottom: 4px;
+        }
+        
+        .multi-select-tag-remove {
+            margin-left: 4px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div class="container mx-auto px-4 py-6">
+        <div class="flex flex-col lg:flex-row gap-6">
+            <!-- Left sidebar -->
+            <div class="w-full lg:w-1/4 space-y-4">
+                <!-- Team Members -->
+                <div class="bg-white rounded-lg shadow p-4">
+                    <div class="flex justify-between items-center mb-3">
+                        <h2 class="font-medium">Membros da Equipe</h2>
+                        <button onclick="toggleMemberForm()" class="text-blue-500 hover:text-blue-700">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </div>
+                    <div id="memberForm" class="hidden mb-3">
+                        <input type="text" id="newMemberName" placeholder="Nome" class="w-full p-2 border rounded text-xs mb-1">
+                        <input type="text" id="newMemberRole" placeholder="Cargo" class="w-full p-2 border rounded text-xs">
+                        <div class="flex justify-end space-x-2 mt-2">
+                            <button onclick="cancelAddMember()" class="text-xs bg-gray-200 px-2 py-1 rounded">Cancelar</button>
+                            <button onclick="addMember()" class="text-xs bg-blue-500 text-white px-2 py-1 rounded">Adicionar</button>
+                        </div>
+                    </div>
+                    <div id="teamMembersList" class="space-y-2">
+                        <!-- Members will be rendered here -->
+                    </div>
+                </div>
+
+                <!-- Companies -->
+                <div class="bg-white rounded-lg shadow p-4">
+                    <div class="flex justify-between items-center mb-3">
+                        <h2 class="font-medium">Empresas</h2>
+                        <button onclick="toggleCompanyForm()" class="text-blue-500 hover:text-blue-700">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </div>
+                    <div id="companyForm" class="hidden mb-3">
+                        <input type="text" id="newCompanyName" placeholder="Nome da empresa" class="w-full p-2 border rounded text-xs">
+                        <div class="flex justify-end space-x-2 mt-2">
+                            <button onclick="cancelAddCompany()" class="text-xs bg-gray-200 px-2 py-1 rounded">Cancelar</button>
+                            <button onclick="addCompany()" class="text-xs bg-blue-500 text-white px-2 py-1 rounded">Adicionar</button>
+                        </div>
+                    </div>
+                    <div id="companiesList" class="space-y-2">
+                        <!-- Companies will be rendered here -->
+                    </div>
+                </div>
+
+                <!-- Filtros -->
+                <div class="bg-white rounded-lg shadow p-4">
+                    <h2 class="text-lg font-semibold mb-3">Filtros</h2>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Status</label>
+                            <select id="filterStatus" class="w-full px-3 py-2 border rounded text-sm">
+                                <option value="">Todos</option>
+                                <option value="todo">A Fazer</option>
+                                <option value="inprogress">Em Progresso</option>
+                                <option value="done">Concluído</option>
+                                <option value="archived">Arquivado</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Prioridade</label>
+                            <select id="filterPriority" class="w-full px-3 py-2 border rounded text-sm">
+                                <option value="">Todos</option>
+                                <option value="low">Baixo</option>
+                                <option value="medium">Médio</option>
+                                <option value="high">Alto</option>
+                                <option value="critical">Crítico</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Responsável</label>
+                            <select id="filterResponsible" class="w-full px-3 py-2 border rounded text-sm">
+                                <option value="">Todos</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Cliente</label>
+                            <select id="filterCompany" class="w-full px-3 py-2 border rounded text-sm">
+                                <option value="">Todos</option>
+                            </select>
+                        </div>
+                        <div>
+                            <button onclick="resetFilters()" class="w-full text-xs bg-gray-200 hover:bg-gray-300 px-3 py-1.5 rounded mt-2">
+                                Limpar Filtros
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Archived Tasks Button -->
+                <div class="bg-white rounded-lg shadow p-4">
+                    <button onclick="showArchivedTasks()" class="w-full flex items-center justify-center text-sm bg-gray-100 hover:bg-gray-200 px-4 py-2 rounded">
+                        <i class="fas fa-archive mr-2"></i> Visualizar Arquivadas
+                    </button>
+                    <button onclick="exportToICS()" class="w-full flex items-center justify-center text-sm bg-blue-100 hover:bg-blue-200 px-4 py-2 rounded mt-2">
+                        <i class="fas fa-calendar-export mr-2"></i> Exportar para Outlook
+                    </button>
+                </div>
+            </div>
+
+            <!-- Main content -->
+            <div class="w-full lg:w-3/4">
+                <div class="bg-white rounded-lg shadow p-5">
+                    <div class="flex justify-between items-center mb-6">
+                        <h1 class="text-xl font-bold">Gestão de Atividades</h1>
+                        <button onclick="toggleTaskForm()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm flex items-center">
+                            <i class="fas fa-plus mr-2"></i> Nova Atividade
+                        </button>
+                    </div>
+
+                    <!-- Task form -->
+                    <div id="taskForm" class="hidden mb-6 p-4 bg-gray-50 rounded-lg space-y-3">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-sm font-medium mb-1">Cliente*</label>
+                                <select id="taskCompany" class="w-full px-3 py-2 border rounded text-sm" required>
+                                    <option value="">Selecione</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">Título*</label>
+                                <input type="text" id="taskTitle" class="w-full px-3 py-2 border rounded text-sm" required>
+                            </div>
+                            <div class="relative multi-select">
+                                <label class="block text-sm font-medium mb-1">Responsável*</label>
+                                <div class="flex flex-wrap items-center p-2 border rounded bg-white cursor-pointer" onclick="toggleMultiSelectDropdown('taskResponsibleDropdown')">
+                                    <div id="taskResponsibleSelected" class="text-sm text-gray-500">Selecione os responsáveis</div>
+                                    <input type="text" id="taskResponsibleInput" class="hidden">
+                                </div>
+                                <div id="taskResponsibleDropdown" class="multi-select-dropdown">
+                                    <div class="p-2 text-sm text-gray-500 border-b">Selecione um ou mais membros</div>
+                                    <div id="taskResponsibleOptions" class="p-1 space-y-1">
+                                        <!-- Options will be populated here -->
+                                    </div>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">Prioridade*</label>
+                                <select id="taskPriority" class="w-full px-3 py-2 border rounded text-sm" required>
+                                    <option value="low">Baixo</option>
+                                    <option value="medium">Médio</option>
+                                    <option value="high" selected>Alto</option>
+                                    <option value="critical">Crítico</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">Data de Vencimento</label>
+                                <input type="date" id="taskDueDate" class="w-full px-3 py-2 border rounded text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">Status</label>
+                                <select id="taskStatus" class="w-full px-3 py-2 border rounded text-sm">
+                                    <option value="todo">A Fazer</option>
+                                    <option value="inprogress">Em Progresso</option>
+                                    <option value="done">Concluído</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Descrição</label>
+                            <textarea id="taskDescription" class="w-full px-3 py-2 border rounded text-sm" rows="2"></textarea>
+                        </div>
+                        <div class="flex justify-end space-x-2 pt-2">
+                            <button onclick="cancelAddTask()" class="px-3 py-1.5 bg-gray-200 rounded text-sm">Cancelar</button>
+                            <button onclick="addTask()" class="px-3 py-1.5 bg-blue-600 text-white rounded text-sm">Adicionar</button>
+                        </div>
+                    </div>
+
+                    <!-- Task list -->
+                    <div id="taskList" class="space-y-2">
+                        <!-- Tasks will be rendered here -->
+                    </div>
+
+                    <!-- Archived tasks modal -->
+                    <div id="archivedModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+                        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-4xl max-h-[80vh] overflow-y-auto">
+                            <div class="flex justify-between items-center mb-4">
+                                <h2 class="text-xl font-bold">Atividades Arquivadas</h2>
+                                <button onclick="hideArchivedTasks()" class="text-gray-500 hover:text-gray-700">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                            <div id="archivedTasksList" class="space-y-2">
+                                <!-- Archived tasks will be rendered here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Calendar integration popup -->
+    <div id="calendarPopup" class="calendar-popup">
+        <div class="flex justify-between items-center mb-2">
+            <h3 class="font-semibold">Adicionar ao Calendário</h3>
+            <button onclick="hideCalendarPopup()" class="text-gray-500 hover:text-gray-700">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="space-y-3">
+            <div>
+                <label class="block text-sm font-medium mb-1">Data de Início</label>
+                <input type="datetime-local" id="calendarStart" class="w-full px-2 py-1 border rounded text-sm">
+            </div>
+            <div>
+                <label class="block text-sm font-medium mb-1">Data de Término</label>
+                <input type="datetime-local" id="calendarEnd" class="w-full px-2 py-1 border rounded text-sm">
+            </div>
+            <div>
+                <label class="block text-sm font-medium mb-1">Lembrete</label>
+                <select id="calendarReminder" class="w-full px-2 py-1 border rounded text-sm">
+                    <option value="0">Nenhum</option>
+                    <option value="15">15 minutos antes</option>
+                    <option value="30">30 minutos antes</option>
+                    <option value="60">1 hora antes</option>
+                    <option value="1440">1 dia antes</option>
+                </select>
+            </div>
+            <button onclick="addToCalendar()" class="w-full bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-sm">
+                Adicionar ao Outlook
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Initial data
+        let teamMembers = [
+            { id: 1, name: 'Andrei', role: 'Sócio' },
+            { id: 2, name: 'Carolina', role: 'Account Manager' },
+            { id: 3, name: 'Juliana', role: 'Consultora' },
+            { id: 4, name: 'Camila', role: 'Consultora' }
+        ];
+
+        let companies = [
+            { id: 1, name: 'Account Manager' },
+            { id: 2, name: 'Altice' },
+            { id: 3, name: 'Carmelo Fior' },
+            { id: 4, name: 'Carbonari' },
+            { id: 5, name: 'Cristiano Naves Garcia' },
+            { id: 6, name: 'Diatom' },
+            { id: 7, name: 'E-Core' },
+            { id: 8, name: 'Duek Lara' },
+            { id: 9, name: 'FCO Group' },
+            { id: 10, name: 'Luiz Brito Nathor' },
+            { id: 11, name: 'Promex' },
+            { id: 12, name: 'Randon' },
+            { id: 13, name: 'Silvercap' },
+            { id: 14, name: 'Vilas Partners' },
+            { id: 15, name: 'Urca INC' }
+        ];
+
+        let tasks = [
+            // Account Manager tasks
+            { 
+                id: 1, 
+                companyId: 1, 
+                title: 'Levantamento para Camila Andrade', 
+                responsible: ['Carolina'], 
+                priority: 'high', 
+                status: 'inprogress', 
+                column: 'todo', 
+                comments: [], 
+                updatedAt: '2023-06-15T10:30:00', 
+                dueDate: '2023-06-30', 
+                description: 'Reunir informações sobre o projeto de Camila Andrade' 
+            },
+            { 
+                id: 2, 
+                companyId: 1, 
+                title: 'Enviar Email Padrão para Clientes', 
+                responsible: ['Andrei'], 
+                priority: 'medium', 
+                status: 'todo', 
+                column: 'todo', 
+                comments: [], 
+                updatedAt: '2023-06-14T15:45:00', 
+                dueDate: '2023-06-25' 
+            },
+            { 
+                id: 5, 
+                companyId: 1, 
+                title: 'FUP Fernando Processos de Marcas', 
+                responsible: ['Andrei'], 
+                priority: 'low', 
+                status: 'todo', 
+                column: 'todo', 
+                comments: [], 
+                updatedAt: '2023-06-16T09:00:00', 
+                dueDate: '2023-07-10' 
+            },
+            { 
+                id: 6, 
+                companyId: 1, 
+                title: 'Ver obrigações de offshore', 
+                responsible: ['Andrei'], 
+                priority: 'low', 
+                status: 'inprogress', 
+                column: 'inprogress', 
+                comments: [], 
+                updatedAt: '2023-06-16T09:15:00', 
+                dueDate: '2023-06-20' 
+            },
+            { 
+                id: 7, 
+                companyId: 1, 
+                title: 'Colocar Carolina Alonso como Account Owner CRM', 
+                responsible: ['Andrei'], 
+                priority: 'low', 
+                status: 'done', 
+                column: 'done', 
+                comments: [], 
+                updatedAt: '2023-06-16T09:30:00', 
+                description: 'Atualizar o sistema de CRM com as informações corretas' 
+            },
+            { 
+                id: 8, 
+                companyId: 1, 
+                title: 'Atualizar Dashboards', 
+                responsible: ['Andrei'], 
+                priority: 'low', 
+                status: 'done', 
+                column: 'archived', 
+                comments: [], 
+                updatedAt: '2023-06-16T09:45:00' 
+            },
+            
+            // Other sample tasks
+            { 
+                id: 9, 
+                companyId: 2, 
+                title: 'FUP Tax Residence Certificate 2025', 
+                responsible: ['Carolina'], 
+                priority: 'high', 
+                status: 'inprogress', 
+                column: 'todo', 
+                comments: [], 
+                updatedAt: '2023-06-16T10:00:00', 
+                dueDate: '2023-07-15' 
+            },
+            { 
+                id: 10, 
+                companyId: 3, 
+                title: 'FUP BPO financeiro', 
+                responsible: ['Andrei', 'Carolina'], 
+                priority: 'high', 
+                status: 'inprogress', 
+                column: 'inprogress', 
+                comments: [], 
+                updatedAt: '2023-06-16T11:30:00', 
+                description: 'Follow up do processo de BPO financeiro' 
+            },
+            { 
+                id: 11, 
+                companyId: 4, 
+                title: 'Docs para DIRPF, BRGAAP, contabilidade e DCBE', 
+                responsible: ['Carolina', 'Juliana'], 
+                priority: 'high', 
+                status: 'done', 
+                column: 'done', 
+                comments: [], 
+                updatedAt: '2023-06-16T14:15:00', 
+                dueDate: '2023-06-18' 
+            },
+            { 
+                id: 12, 
+                companyId: 5, 
+                title: 'FUP cliente qto operação', 
+                responsible: ['Andrei'], 
+                priority: 'medium', 
+                status: 'done', 
+                column: 'archived', 
+                comments: [], 
+                updatedAt: '2023-06-16T16:00:00' 
+            }
+        ];
+
+        // DOM elements
+        const taskListEl = document.getElementById('taskList');
+        const filterStatusEl = document.getElementById('filterStatus');
+        const filterPriorityEl = document.getElementById('filterPriority');
+        const filterResponsibleEl = document.getElementById('filterResponsible');
+        const filterCompanyEl = document.getElementById('filterCompany');
+        const archivedModalEl = document.getElementById('archivedModal');
+        const archivedTasksListEl = document.getElementById('archivedTasksList');
+        const calendarPopupEl = document.getElementById('calendarPopup');
+        
+        // Store task being added to calendar
+        let currentCalendarTask = null;
+        
+        // Initialize the app
+        document.addEventListener('DOMContentLoaded', () => {
+            renderTasks();
+            populateDropdowns();
+            setupFilters();
+            renderTeamMembers();
+            renderCompanies();
+            initSortable();
+            setupMultiSelect();
+        });
+
+        // Initialize SortableJS for drag and drop prioritization
+        function initSortable() {
+            document.querySelectorAll('.task-column').forEach(container => {
+                new Sortable(container, {
+                    group: 'shared',
+                    animation: 150,
+                    ghostClass: 'sortable-ghost',
+                    chosenClass: 'sortable-chosen',
+                    dragClass: 'sortable-drag',
+                    onEnd: (evt) => {
+                        const taskId = parseInt(evt.item.getAttribute('data-task-id'));
+                        const newIndex = evt.newIndex;
+                        updateTaskOrder(taskId, newIndex, evt.to);
+                    }
+                });
+            });
+        }
+
+        // Update task order after drag and drop
+        function updateTaskOrder(taskId, newIndex, container) {
+            const task = tasks.find(t => t.id === taskId);
+            if (task) {
+                task.updatedAt = new Date().toISOString();
+                const status = container.id.split('-').pop();
+                task.column = status;
+                
+                // Update status based on column
+                if (status === 'todo') {
+                    task.status = 'todo';
+                } else if (status === 'inprogress') {
+                    task.status = 'inprogress';
+                } else if (status === 'done') {
+                    task.status = 'done';
+                }
+                
+                renderTasks();
+            }
+        }
+
+        // Setup multi-select dropdown
+        let selectedResponsibles = [];
+        
+        function setupMultiSelect() {
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('.multi-select')) {
+                    document.querySelectorAll('.multi-select-dropdown').forEach(dropdown => {
+                        dropdown.style.display = 'none';
+                    });
+                }
+            });
+        }
+        
+        function toggleMultiSelectDropdown(dropdownId) {
+            const dropdown = document.getElementById(dropdownId);
+            document.querySelectorAll('.multi-select-dropdown').forEach(d => {
+                if (d.id !== dropdownId) d.style.display = 'none';
+            });
+            dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+        }
+        
+        function selectResponsible(memberName) {
+            if (!selectedResponsibles.includes(memberName)) {
+                selectedResponsibles.push(memberName);
+            } else {
+                selectedResponsibles = selectedResponsibles.filter(m => m !== memberName);
+            }
+            
+            updateSelectedResponsibles();
+        }
+        
+        function updateSelectedResponsibles() {
+            const container = document.getElementById('taskResponsibleSelected');
+            const input = document.getElementById('taskResponsibleInput');
+            
+            if (selectedResponsibles.length === 0) {
+                container.innerHTML = 'Selecione os responsáveis';
+                input.value = '';
+            } else {
+                container.innerHTML = '';
+                selectedResponsibles.forEach(member => {
+                    const tag = document.createElement('span');
+                    tag.className = 'multi-select-tag';
+                    tag.innerHTML = `${member} <span class="multi-select-tag-remove" onclick="removeResponsible(event, '${member}')">&times;</span>`;
+                    container.appendChild(tag);
+                });
+                input.value = selectedResponsibles.join(', ');
+            }
+        }
+        
+        function removeResponsible(event, memberName) {
+            event.stopPropagation();
+            selectedResponsibles = selectedResponsibles.filter(m => m !== memberName);
+            updateSelectedResponsibles();
+            document.querySelectorAll(`#taskResponsibleOptions input[type="checkbox"][value="${memberName}"]`).forEach(checkbox => {
+                checkbox.checked = false;
+            });
+        }
+
+        // Render functions
+        function renderTasks() {
+            taskListEl.innerHTML = '';
+
+            // Get filter values
+            const statusFilter = filterStatusEl.value;
+            const priorityFilter = filterPriorityEl.value;
+            const responsibleFilter = filterResponsibleEl.value;
+            const companyFilter = filterCompanyEl.value;
+
+            // Filter tasks (don't show archived tasks here)
+            const filteredTasks = tasks.filter(task => {
+                return task.column !== 'archived' &&
+                    (statusFilter === '' || task.column === statusFilter) &&
+                    (priorityFilter === '' || task.priority === priorityFilter) &&
+                    (responsibleFilter === '' || task.responsible.includes(responsibleFilter)) &&
+                    (companyFilter === '' || task.companyId.toString() === companyFilter);
+            });
+
+            // Sort by updated date (most recent first)
+            filteredTasks.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+
+            // Get unique companies in filtered tasks
+            const companyIds = [...new Set(filteredTasks.map(task => task.companyId))];
+            const filteredCompanies = companies.filter(company => companyIds.includes(company.id));
+
+            // If no tasks, show message
+            if (filteredTasks.length === 0) {
+                taskListEl.innerHTML = '<p class="text-center text-gray-500 py-4">Nenhuma tarefa encontrada com os filtros atuais</p>';
+                return;
+            }
+
+            // Render for each company
+            filteredCompanies.forEach(company => {
+                const companyTasks = filteredTasks.filter(task => task.companyId === company.id);
+                
+                // Group by status for this company
+                const groupedTasks = {
+                    todo: [],
+                    inprogress: [],
+                    done: []
+                };
+
+                companyTasks.forEach(task => {
+                    groupedTasks[task.column].push(task);
+                });
+
+                // Only show company header if there are tasks
+                if (companyTasks.length > 0) {
+                    const companyHeader = document.createElement('div');
+                    companyHeader.className = 'mt-6 mb-4 p-2 bg-gray-100 rounded-lg';
+                    companyHeader.innerHTML = `
+                        <h2 class="text-lg font-semibold">${company.name}</h2>
+                    `;
+                    taskListEl.appendChild(companyHeader);
+
+                    // Render status groups for this company
+                    ['todo', 'inprogress', 'done'].forEach(status => {
+                        const groupTasks = groupedTasks[status];
+                        if (groupTasks.length === 0) return;
+
+                        const groupTitle = getStatusTitle(status);
+                        const groupEl = document.createElement('div');
+                        groupEl.className = 'mb-6 ml-4 mt-2';
+                        groupEl.innerHTML = `
+                            <h3 class="font-medium text-gray-700 mb-2 flex items-center">
+                                <span class="inline-block w-3 h-3 rounded-full mr-2 ${getStatusColor(status)}"></span>
+                                ${groupTitle} (${groupTasks.length})
+                            </h3>
+                            <div id="tasks-${company.id}-${status}" class="task-column space-y-2">
+                            </div>
+                        `;
+
+                        taskListEl.appendChild(groupEl);
+
+                        const tasksContainerEl = groupEl.querySelector(`#tasks-${company.id}-${status}`);
+                        groupTasks.forEach((task, index) => {
+                            renderTask(task, tasksContainerEl, index);
+                        });
+                    });
+                }
+            });
+
+            // Reinitialize SortableJS after rendering
+            initSortable();
+        }
+
+        function renderTask(task, container, index) {
+            const company = companies.find(c => c.id === task.companyId);
+            const priorityClass = `priority-${task.priority}`;
+            const statusClass = `status-${task.column}`;
+
+            const taskEl = document.createElement('div');
+            taskEl.className = `bg-white rounded shadow p-3 draggable ${priorityClass} ${statusClass} hover:shadow-md transition-shadow`;
+            taskEl.draggable = true;
+            taskEl.id = `task-${task.id}`;
+            taskEl.setAttribute('data-task-id', task.id);
+            taskEl.setAttribute('data-status', task.column);
+
+            // Determine if task is overdue
+            const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.column !== 'done';
+            
+            // Calculate days remaining or overdue
+            let dueDateText = '';
+            if (task.dueDate) {
+                const dueDate = new Date(task.dueDate);
+                const today = new Date();
+                const diffTime = dueDate - today;
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                
+                if (dueDate.toDateString() === today.toDateString()) {
+                    dueDateText = '<span class="text-yellow-600">Hoje</span>';
+                } else if (diffDays < 0) {
+                    dueDateText = `<span class="text-red-600">${Math.abs(diffDays)} dia(s) atrasado</span>`;
+                } else if (diffDays === 1) {
+                    dueDateText = '<span class="text-yellow-600">Amanhã</span>';
+                } else if (diffDays <= 7) {
+                    dueDateText = `<span class="text-yellow-600">${diffDays} dia(s)</span>`;
+                } else {
+                    dueDateText = `<span>${formatDate(task.dueDate)}</span>`;
+                }
+            }
+
+            // Render responsible badges
+            let responsibleBadges = '';
+            if (task.responsible && task.responsible.length > 0) {
+                task.responsible.forEach(responsible => {
+                    responsibleBadges += `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-800 mr-1">${responsible}</span>`;
+                });
+            }
+
+            taskEl.innerHTML = `
+                <div class="flex items-start" draggable="true">
+                    <div class="flex-shrink-0 pt-1 pr-2">
+                        <i class="fas fa-grip-vertical text-gray-300 hover:text-gray-500 cursor-grab"></i>
+                    </div>
+                    <div class="flex-grow">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <div class="flex items-center">
+                                    ${task.column === 'done' ? '<i class="fas fa-check-circle text-green-500 mr-1"></i>' : ''}
+                                    <div class="text-xs text-gray-500 mb-1">${company ? company.name : ''}</div>
+                                </div>
+                                <h3 class="font-medium flex items-center">
+                                    ${task.title}
+                                    ${task.column === 'done' ? '<span class="ml-2 text-xs bg-green-100 text-green-800 px-1.5 py-0.5 rounded">Concluído</span>' : ''}
+                                </h3>
+                                ${task.description ? `<p class="text-sm text-gray-600 mt-1 mb-2">${task.description}</p>` : ''}
+                                ${task.dueDate ? `<div class="text-xs mt-1"><i class="far fa-calendar-alt mr-1"></i> ${dueDateText}</div>` : ''}
+                                <div class="flex flex-wrap mt-2">
+                                    ${responsibleBadges}
+                                </div>
+                            </div>
+                            <div class="flex space-x-2">
+                                <button onclick="showCalendarPopup(${task.id}, event)" class="text-gray-400 hover:text-blue-500" title="Adicionar ao calendário">
+                                    <i class="far fa-calendar-plus text-sm"></i>
+                                </button>
+                                <button onclick="editTask(${task.id})" class="text-gray-400 hover:text-blue-500">
+                                    <i class="fas fa-edit text-sm"></i>
+                                </button>
+                                ${task.column === 'done' ? 
+                                    `<button onclick="archiveTask(${task.id})" class="text-gray-400 hover:text-gray-600" title="Arquivar">
+                                        <i class="fas fa-archive text-sm"></i>
+                                    </button>` : 
+                                    `<button onclick="removeTask(${task.id})" class="text-gray-400 hover:text-red-500">
+                                        <i class="fas fa-trash-alt text-sm"></i>
+                                    </button>`
+                                }
+                            </div>
+                        </div>
+                        <div class="mt-2 flex items-center justify-between text-xs">
+                            <span class="inline-flex items-center ${getPriorityTextColor(task.priority)}">
+                                <i class="fas fa-exclamation-circle mr-1"></i>
+                                ${getPriorityLabel(task.priority)}
+                            </span>
+                            <span class="text-gray-500">
+                                <i class="far fa-clock mr-1"></i>
+                                ${formatDate(task.updatedAt)}
+                                <button onclick="toggleComments(${task.id})" class="ml-2 text-blue-500 hover:text-blue-700">
+                                    <i class="far fa-comment"></i> ${task.comments.length}
+                                </button>
+                            </span>
+                        </div>
+                        <div id="comments-${task.id}" class="hidden mt-2 border-t pt-2" data-task-id="${task.id}">
+                            <div class="max-h-40 overflow-y-auto custom-scrollbar space-y-2">
+                                ${task.comments.length > 0 ? 
+                                    task.comments.map(comment => `
+                                        <div class="bg-gray-50 p-2 rounded text-xs" data-comment-id="${comment.id}">
+                                            <div class="flex justify-between">
+                                                <div>
+                                                    <strong>${comment.author}</strong>
+                                                    <span class="text-gray-500 ml-2">${formatDate(comment.timestamp)}</span>
+                                                </div>
+                                                <div class="space-x-1">
+                                                    <button onclick="editComment(${task.id}, ${comment.id})" class="text-blue-500 hover:text-blue-700">
+                                                        <i class="fas fa-edit text-xs"></i>
+                                                    </button>
+                                                    <button onclick="deleteComment(${task.id}, ${comment.id})" class="text-red-500 hover:text-red-700">
+                                                        <i class="fas fa-trash-alt text-xs"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <p id="comment-text-${task.id}-${comment.id}">${comment.text}</p>
+                                            <div id="comment-edit-${task.id}-${comment.id}" class="hidden mt-1">
+                                                <textarea class="w-full p-1 border rounded text-xs" id="comment-edit-input-${task.id}-${comment.id}">${comment.text}</textarea>
+                                                <div class="flex justify-end space-x-1 mt-1">
+                                                    <button onclick="cancelEditComment(${task.id}, ${comment.id})" class="text-xs bg-gray-200 px-2 py-0.5 rounded">Cancelar</button>
+                                                    <button onclick="saveComment(${task.id}, ${comment.id})" class="text-xs bg-blue-500 text-white px-2 py-0.5 rounded">Salvar</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    `).join('') :
+                                    '<p class="text-gray-500 text-center text-xs">Nenhum comentário</p>'
+                                }
+                            </div>
+                            <div class="mt-2">
+                                <textarea id="comment-input-${task.id}" class="w-full p-2 border rounded text-xs" placeholder="Adicionar comentário..."></textarea>
+                                <button onclick="addComment(${task.id})" class="mt-1 text-xs bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600">
+                                    Enviar
+                                </button>
+                            </div>
+                            <div class="flex justify-between mt-2">
+                                <button onclick="updateTaskStatus(${task.id}, 'inprogress')" class="text-xs bg-yellow-500 text-white px-2 py-1 rounded hover:bg-yellow-600 ${task.column === 'inprogress' || task.column === 'done' ? 'hidden' : ''}">
+                                    <i class="fas fa-spinner mr-1"></i> Em Progresso
+                                </button>
+                                <button onclick="updateTaskStatus(${task.id}, 'done')" class="text-xs bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600 ${task.column === 'done' ? 'hidden' : ''}">
+                                    <i class="fas fa-check mr-1"></i> Concluir
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            container.appendChild(taskEl);
+        }
+
+        // Task status management
+        function updateTaskStatus(id, status) {
+            const task = tasks.find(t => t.id === id);
+            if (task) {
+                task.column = status;
+                task.status = status;
+                task.updatedAt = new Date().toISOString();
+                renderTasks();
+            }
+        }
+
+        // Form functions
+        function toggleTaskForm() {
+            document.getElementById('taskForm').classList.toggle('hidden');
+            if (!document.getElementById('taskForm').classList.contains('hidden')) {
+                selectedResponsibles = [];
+                updateSelectedResponsibles();
+            }
+        }
+
+        function cancelAddTask() {
+            document.getElementById('taskTitle').value = '';
+            document.getElementById('taskCompany').value = '';
+            document.getElementById('taskResponsibleInput').value = '';
+            document.getElementById('taskPriority').value = 'high';
+            document.getElementById('taskDueDate').value = '';
+            document.getElementById('taskDescription').value = '';
+            document.getElementById('taskStatus').value = 'todo';
+            toggleTaskForm();
+        }
+
+        function addTask() {
+            const companyId = parseInt(document.getElementById('taskCompany').value);
+            const title = document.getElementById('taskTitle').value.trim();
+            const responsible = selectedResponsibles;
+            const priority = document.getElementById('taskPriority').value;
+            const dueDate = document.getElementById('taskDueDate').value;
+            const description = document.getElementById('taskDescription').value.trim();
+            const status = document.getElementById('taskStatus').value;
+            const column = status; // For backward compatibility
+
+            if (!title || !companyId || responsible.length === 0) {
+                alert('Por favor, preencha todos os campos obrigatórios');
+                return;
+            }
+
+            const newId = tasks.length > 0 ? Math.max(...tasks.map(t => t.id)) + 1 : 1;
+            tasks.push({
+                id: newId,
+                companyId,
+                title,
+                responsible,
+                priority,
+                status,
+                column,
+                comments: [],
+                updatedAt: new Date().toISOString(),
+                dueDate: dueDate || null,
+                description: description || null
+            });
+
+            cancelAddTask();
+            renderTasks();
+        }
+
+        function editTask(id) {
+            const task = tasks.find(t => t.id === id);
+            if (!task) return;
+
+            // Fill form with task data
+            document.getElementById('taskTitle').value = task.title;
+            document.getElementById('taskCompany').value = task.companyId;
+            
+            // Set selected responsibles
+            selectedResponsibles = [...task.responsible];
+            updateSelectedResponsibles();
+            
+            document.getElementById('taskPriority').value = task.priority;
+            document.getElementById('taskDueDate').value = task.dueDate || '';
+            document.getElementById('taskDescription').value = task.description || '';
+            document.getElementById('taskStatus').value = task.status;
+            
+            // Show form
+            const taskForm = document.getElementById('taskForm');
+            taskForm.classList.remove('hidden');
+            
+            // Change add button to update
+            const formButtons = taskForm.querySelector('.flex.justify-end.space-x-2.pt-2');
+            formButtons.innerHTML = `
+                <button onclick="cancelAddTask()" class="px-3 py-1.5 bg-gray-200 rounded text-sm">Cancelar</button>
+                <button onclick="updateTask(${id})" class="px-3 py-1.5 bg-blue-600 text-white rounded text-sm">Atualizar</button>
+            `;
+            
+            // Scroll to form
+            taskForm.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function updateTask(id) {
+            const companyId = parseInt(document.getElementById('taskCompany').value);
+            const title = document.getElementById('taskTitle').value.trim();
+            const responsible = selectedResponsibles;
+            const priority = document.getElementById('taskPriority').value;
+            const dueDate = document.getElementById('taskDueDate').value;
+            const description = document.getElementById('taskDescription').value.trim();
+            const status = document.getElementById('taskStatus').value;
+            const column = status; // For backward compatibility
+
+            if (!title || !companyId || responsible.length === 0) {
+                alert('Por favor, preencha todos os campos obrigatórios');
+                return;
+            }
+
+            const taskIndex = tasks.findIndex(t => t.id === id);
+            if (taskIndex !== -1) {
+                tasks[taskIndex] = {
+                    ...tasks[taskIndex],
+                    companyId,
+                    title,
+                    responsible,
+                    priority,
+                    status,
+                    column,
+                    dueDate: dueDate || null,
+                    description: description || null,
+                    updatedAt: new Date().toISOString()
+                };
+            }
+
+            cancelAddTask();
+            renderTasks();
+        }
+
+        function removeTask(id) {
+            if (confirm('Tem certeza que deseja remover esta tarefa?')) {
+                tasks = tasks.filter(task => task.id !== id);
+                renderTasks();
+            }
+        }
+
+        // Task status functions
+        function markInProgress(id) {
+            const task = tasks.find(t => t.id === id);
+            if (task) {
+                task.column = 'inprogress';
+                task.status = 'inprogress';
+                task.updatedAt = new Date().toISOString();
+                renderTasks();
+            }
+        }
+
+        function markDone(id) {
+            const task = tasks.find(t => t.id === id);
+            if (task) {
+                task.column = 'done';
+                task.status = 'done';
+                task.updatedAt = new Date().toISOString();
+                renderTasks();
+            }
+        }
+
+        function archiveTask(id) {
+            const task = tasks.find(t => t.id === id);
+            if (task) {
+                task.column = 'archived';
+                task.updatedAt = new Date().toISOString();
+                renderTasks();
+            }
+        }
+
+        function showArchivedTasks() {
+            archivedTasksListEl.innerHTML = '';
+            
+            const archivedTasks = tasks.filter(task => task.column === 'archived');
+            if (archivedTasks.length === 0) {
+                archivedTasksListEl.innerHTML = '<p class="text-center text-gray-500 py-4">Nenhuma tarefa arquivada</p>';
+            } else {
+                archivedTasks.forEach(task => {
+                    const company = companies.find(c => c.id === task.companyId);
+                    const taskEl = document.createElement('div');
+                    taskEl.className = 'bg-white rounded shadow p-3 mb-3';
+                    taskEl.innerHTML = `
+                        <div class="flex justify-between">
+                            <div>
+                                <h3 class="font-medium">${task.title}</h3>
+                                <p class="text-xs text-gray-500">${company ? company.name : ''} • ${formatDate(task.updatedAt)}</p>
+                                <div class="flex flex-wrap mt-1">
+                                    ${task.responsible.map(responsible => 
+                                        `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-800 mr-1 mb-1">${responsible}</span>`
+                                    ).join('')}
+                                </div>
+                            </div>
+                            <div class="flex space-x-2">
+                                <button onclick="unarchiveTask(${task.id})" class="text-blue-500 hover:text-blue-700" title="Restaurar">
+                                    <i class="fas fa-undo text-sm"></i>
+                                </button>
+                                <button onclick="removeTask(${task.id})" class="text-red-500 hover:text-red-700" title="Excluir permanentemente">
+                                    <i class="fas fa-trash-alt text-sm"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                    archivedTasksListEl.appendChild(taskEl);
+                });
+            }
+            
+            archivedModalEl.classList.remove('hidden');
+        }
+
+        function hideArchivedTasks() {
+            archivedModalEl.classList.add('hidden');
+        }
+
+        function unarchiveTask(id) {
+            const task = tasks.find(t => t.id === id);
+            if (task) {
+                task.column = 'todo';
+                task.status = 'todo';
+                task.updatedAt = new Date().toISOString();
+                hideArchivedTasks();
+                renderTasks();
+            }
+        }
+
+        // Comment functions
+        let nextCommentId = 4; // Start from 4 since we have some sample comments
+
+        function toggleComments(taskId) {
+            const commentsEl = document.getElementById(`comments-${taskId}`);
+            commentsEl.classList.toggle('hidden');
+        }
+
+        function addComment(taskId) {
+            const commentText = document.getElementById(`comment-input-${taskId}`).value.trim();
+            if (!commentText) return;
+
+            const task = tasks.find(t => t.id === taskId);
+            if (task) {
+                const commentId = nextCommentId++;
+                task.comments.push({
+                    id: commentId,
+                    text: commentText,
+                    author: 'Você',
+                    timestamp: new Date().toISOString()
+                });
+                task.updatedAt = new Date().toISOString();
+                document.getElementById(`comment-input-${taskId}`).value = '';
+                renderTasks();
+            }
+        }
+
+        function editComment(taskId, commentId) {
+            document.getElementById(`comment-text-${taskId}-${commentId}`).classList.add('hidden');
+            document.getElementById(`comment-edit-${taskId}-${commentId}`).classList.remove('hidden');
+        }
+
+        function cancelEditComment(taskId, commentId) {
+            document.getElementById(`comment-text-${taskId}-${commentId}`).classList.remove('hidden');
+            document.getElementById(`comment-edit-${taskId}-${commentId}`).classList.add('hidden');
+        }
+
+        function saveComment(taskId, commentId) {
+            const newText = document.getElementById(`comment-edit-input-${taskId}-${commentId}`).value.trim();
+            if (!newText) return;
+
+            const task = tasks.find(t => t.id === taskId);
+            if (task) {
+                const comment = task.comments.find(c => c.id === commentId);
+                if (comment) {
+                    comment.text = newText;
+                    comment.timestamp = new Date().toISOString();
+                    task.updatedAt = new Date().toISOString();
+                    renderTasks();
+                }
+            }
+        }
+
+        function deleteComment(taskId, commentId) {
+            if (confirm('Tem certeza que deseja excluir este comentário?')) {
+                const task = tasks.find(t => t.id === taskId);
+                if (task) {
+                    task.comments = task.comments.filter(c => c.id !== commentId);
+                    task.updatedAt = new Date().toISOString();
+                    renderTasks();
+                }
+            }
+        }
+
+        // Team member functions
+        function toggleMemberForm() {
+            document.getElementById('memberForm').classList.toggle('hidden');
+        }
+
+        function cancelAddMember() {
+            document.getElementById('newMemberName').value = '';
+            document.getElementById('newMemberRole').value = '';
+            toggleMemberForm();
+        }
+
+        function addMember() {
+            const name = document.getElementById('newMemberName').value.trim();
+            const role = document.getElementById('newMemberRole').value.trim();
+
+            if (!name) {
+                alert('Por favor, insira um nome');
+                return;
+            }
+
+            const newId = teamMembers.length > 0 ? Math.max(...teamMembers.map(m => m.id)) + 1 : 1;
+            teamMembers.push({ id: newId, name, role });
+
+            cancelAddMember();
+            renderTeamMembers();
+            populateDropdowns();
+            setupFilters();
+        }
+
+        function removeMember(id) {
+            if (confirm('Tem certeza que deseja remover este membro?')) {
+                teamMembers = teamMembers.filter(m => m.id !== id);
+                
+                // Remove member from any tasks they're assigned to
+                tasks.forEach(task => {
+                    task.responsible = task.responsible.filter(name => {
+                        const member = teamMembers.find(m => m.name === name);
+                        return member !== undefined;
+                    });
+                });
+                
+                renderTeamMembers();
+                populateDropdowns();
+                setupFilters();
+                renderTasks();
+            }
+        }
+
+        // Company functions
+        function toggleCompanyForm() {
+            document.getElementById('companyForm').classList.toggle('hidden');
+        }
+
+        function cancelAddCompany() {
+            document.getElementById('newCompanyName').value = '';
+            toggleCompanyForm();
+        }
+
+        function addCompany() {
+            const name = document.getElementById('newCompanyName').value.trim();
+
+            if (!name) {
+                alert('Por favor, insira um nome');
+                return;
+            }
+
+            const newId = companies.length > 0 ? Math.max(...companies.map(c => c.id)) + 1 : 1;
+            companies.push({ id: newId, name });
+
+            cancelAddCompany();
+            renderCompanies();
+            populateDropdowns();
+            setupFilters();
+        }
+
+        function removeCompany(id) {
+            if (confirm('Tem certeza que deseja remover esta empresa? As tarefas associadas também serão removidas.')) {
+                companies = companies.filter(c => c.id !== id);
+                tasks = tasks.filter(t => t.companyId !== id);
+                renderCompanies();
+                populateDropdowns();
+                setupFilters();
+                renderTasks();
+            }
+        }
+
+        // Render functions for sidebar
+        function renderTeamMembers() {
+            const container = document.getElementById('teamMembersList');
+            container.innerHTML = teamMembers.map(member => `
+                <div class="flex justify-between items-center p-2 bg-gray-50 rounded">
+                    <div>
+                        <div class="text-sm">${member.name}</div>
+                        <div class="text-xs text-gray-500">${member.role}</div>
+                    </div>
+                    <button onclick="removeMember(${member.id})" class="text-red-500 hover:text-red-700">
+                        <i class="fas fa-trash-alt text-xs"></i>
+                    </button>
+                </div>
+            `).join('');
+            
+            // Update multi-select dropdown options
+            const optionsContainer = document.getElementById('taskResponsibleOptions');
+            if (optionsContainer) {
+                optionsContainer.innerHTML = teamMembers.map(member => `
+                    <label class="flex items-center p-1 hover:bg-gray-100 cursor-pointer">
+                        <input type="checkbox" value="${member.name}" class="mr-2" 
+                               ${selectedResponsibles.includes(member.name) ? 'checked' : ''}
+                               onclick="selectResponsible('${member.name}')">
+                        <span>${member.name} (${member.role})</span>
+                    </label>
+                `).join('');
+            }
+        }
+
+        function renderCompanies() {
+            const container = document.getElementById('companiesList');
+            container.innerHTML = companies.map(company => `
+                <div class="flex justify-between items-center p-2 bg-gray-50 rounded">
+                    <div>${company.name}</div>
+                    <button onclick="removeCompany(${company.id})" class="text-red-500 hover:text-red-700">
+                        <i class="fas fa-trash-alt text-xs"></i>
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        // Calendar integration functions
+        function showCalendarPopup(taskId, event) {
+            currentCalendarTask = tasks.find(t => t.id === taskId);
+            if (!currentCalendarTask) return;
+
+            // Position the popup near the button
+            const buttonRect = event.target.getBoundingClientRect();
+            calendarPopupEl.style.display = 'block';
+            calendarPopupEl.style.left = `${buttonRect.left - 250}px`;
+            calendarPopupEl.style.top = `${buttonRect.bottom + 5}px`;
+
+            // Set default values
+            const now = new Date();
+            document.getElementById('calendarStart').value = now.toISOString().slice(0, 16);
+            
+            // Add 1 hour to now for end time
+            const endTime = new Date(now);
+            endTime.setHours(endTime.getHours() + 1);
+            document.getElementById('calendarEnd').value = endTime.toISOString().slice(0, 16);
+            
+            document.getElementById('calendarReminder').value = '30';
+        }
+
+        function hideCalendarPopup() {
+            calendarPopupEl.style.display = 'none';
+            currentCalendarTask = null;
+        }
+
+        function addToCalendar() {
+            if (!currentCalendarTask) return;
+
+            const startTime = document.getElementById('calendarStart').value;
+            const endTime = document.getElementById('calendarEnd').value;
+            const reminderMinutes = parseInt(document.getElementById('calendarReminder').value);
+            const company = companies.find(c => c.id === currentCalendarTask.companyId);
+
+            // In a real app, you would actually create an event in the user's calendar
+            // This is just a simulation
+            alert(`Adicionando ao calendário:\nTarefa: ${currentCalendarTask.title}\nCliente: ${company.name}\nResponsáveis: ${currentCalendarTask.responsible.join(', ')}\nInício: ${startTime}\nTérmino: ${endTime}${reminderMinutes > 0 ? `\nLembrete: ${reminderMinutes} minutos antes` : ''}`);
+
+            hideCalendarPopup();
+        }
+
+        // Export tasks to iCal format
+        function exportToICS() {
+            // Filter tasks with due dates
+            const tasksWithDates = tasks.filter(t => t.dueDate);
+
+            if (tasksWithDates.length === 0) {
+                alert('Nenhuma tarefa com data de vencimento para exportar');
+                return;
+            }
+
+            // Create iCal content
+            let icsContent = 'BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//Task Manager//EN\n';
+
+            tasksWithDates.forEach(task => {
+                const dueDate = task.dueDate.replace(/-/g, '');
+                const company = companies.find(c => c.id === task.companyId);
+
+                icsContent += 'BEGIN:VEVENT\n';
+                icsContent += `UID:${task.id}@taskmanager\n`;
+                icsContent += `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').split('.')[0]}Z\n`;
+                icsContent += `DTSTART:${dueDate}\n`;
+                icsContent += `DTEND:${dueDate}\n`;
+                icsContent += `SUMMARY:${task.title} (${company ? company.name : 'Sem cliente'})\n`;
+                icsContent += `DESCRIPTION:Responsável: ${task.responsible.join(', ')}\\nPrioridade: ${getPriorityLabel(task.priority)}\n`;
+                icsContent += `PRIORITY:${getICalPriority(task.priority)}\n`;
+                icsContent += 'END:VEVENT\n';
+            });
+
+            icsContent += 'END:VCALENDAR';
+
+            // Create download link
+            const blob = new Blob([icsContent], { type: 'text/calendar' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'tarefas.ics';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // Filter functions
+        function setupFilters() {
+            // Populate responsible filter
+            filterResponsibleEl.innerHTML = '<option value="">Todos</option>';
+            const uniqueResponsibles = [...new Set(tasks.flatMap(t => t.responsible).filter(Boolean))];
+            uniqueResponsibles.forEach(name => {
+                const option = document.createElement('option');
+                option.value = name;
+                option.textContent = name;
+                filterResponsibleEl.appendChild(option);
+            });
+
+            // Populate company filter
+            filterCompanyEl.innerHTML = '<option value="">Todos</option>';
+            companies.forEach(company => {
+                const option = document.createElement('option');
+                option.value = company.id;
+                option.textContent = company.name;
+                filterCompanyEl.appendChild(option);
+            });
+
+            // Add event listeners
+            [filterStatusEl, filterPriorityEl, filterResponsibleEl, filterCompanyEl].forEach(el => {
+                el.addEventListener('change', renderTasks);
+            });
+        }
+
+        function resetFilters() {
+            filterStatusEl.value = '';
+            filterPriorityEl.value = '';
+            filterResponsibleEl.value = '';
+            filterCompanyEl.value = '';
+            renderTasks();
+        }
+
+        // Utility functions
+        function populateDropdowns() {
+            // Task form company dropdown
+            const taskCompanyEl = document.getElementById('taskCompany');
+            taskCompanyEl.innerHTML = '<option value="">Selecione</option>';
+            companies.forEach(company => {
+                const option = document.createElement('option');
+                option.value = company.id;
+                option.textContent = company.name;
+                taskCompanyEl.appendChild(option);
+            });
+
+            // Multi-select responsible dropdown options are populated in renderTeamMembers()
+        }
+
+        function getStatusTitle(status) {
+            switch(status) {
+                case 'todo': return 'A Fazer';
+                case 'inprogress': return 'Em Progresso';
+                case 'done': return 'Concluído';
+                case 'archived': return 'Arquivado';
+                default: return status;
+            }
+        }
+
+        function getStatusColor(status) {
+            switch(status) {
+                case 'todo': return 'bg-red-500';
+                case 'inprogress': return 'bg-yellow-500';
+                case 'done': return 'bg-green-500';
+                case 'archived': return 'bg-gray-500';
+                default: return 'bg-gray-500';
+            }
+        }
+
+        function getPriorityLabel(priority) {
+            switch(priority) {
+                case 'low': return 'Baixo';
+                case 'medium': return 'Médio';
+                case 'high': return 'Alto';
+                case 'critical': return 'Crítico';
+                default: return priority;
+            }
+        }
+
+        function getPriorityTextColor(priority) {
+            switch(priority) {
+                case 'low': return 'text-green-600';
+                case 'medium': return 'text-yellow-600';
+                case 'high': return 'text-red-600';
+                case 'critical': return 'text-purple-600';
+                default: return 'text-gray-600';
+            }
+        }
+
+        function getICalPriority(priority) {
+            switch(priority) {
+                case 'low': return '5';
+                case 'medium': return '3';
+                case 'high': return '1';
+                case 'critical': return '0';
+                default: return '5';
+            }
+        }
+
+        function formatDate(isoString) {
+            if (!isoString) return '';
+            
+            const date = new Date(isoString);
+            const now = new Date();
+
+            // If date is today, show time
+            if (date.toDateString() === now.toDateString()) {
+                return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+            }
+            // If date is this year, show day and month
+            else if (date.getFullYear() === now.getFullYear()) {
+                return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
+            }
+            // Otherwise show full date
+            else {
+                return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
+            }
+        }
+    </script>
+</body>
+</html>
